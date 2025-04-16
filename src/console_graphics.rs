@@ -211,12 +211,17 @@ impl GraphicsEngine {
 
         // Get current time
         let now = Local::now();
-        let time_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        let time_str = now.format("%H:%M:%S").to_string();
+        let date_str = now.format("%Y-%m-%d").to_string();
 
-        // Create status line with time and terminal size
+        // Calculate spaces for centering and padding
+        let terminal_info = format!("{}x{}", self.width, self.height);
+        let help_text = "Ctrl+L: Clear | ↑↓: History";
+        
+        // Create a more readable status line with distinct sections
         let status = format!(
-            "Time: {} | Terminal: {}x{} | Press Ctrl+L to clear screen | Use ↑↓ arrows for history",
-            time_str, self.width, self.height
+            " 🕒 {} | 📅 {} | 📺 {} | ⌨️  {} ",
+            time_str, date_str, terminal_info, help_text
         );
 
         // Truncate if needed
@@ -237,13 +242,15 @@ impl GraphicsEngine {
             cursor::MoveTo(0, (self.height - STATUS_BAR_LINE - 1) as u16)
         )?;
 
-        // Set colors and print status
+        // Set colors and print status with improved visibility
         queue!(
             stdout,
-            SetBackgroundColor(Color::Blue),
+            SetBackgroundColor(Color::DarkBlue),
             SetForegroundColor(Color::White),
+            style::SetAttribute(style::Attribute::Bold),
             terminal::Clear(ClearType::CurrentLine),
             style::Print(status_display),
+            style::SetAttribute(style::Attribute::Reset),
             SetBackgroundColor(Color::Reset),
             SetForegroundColor(Color::Reset)
         )?;

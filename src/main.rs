@@ -21,6 +21,7 @@ async fn main() -> std::io::Result<()> {
     let _cleanup_guard = CleanupGuard {};
     println!("Subnet Vox - P2P Chat (Tailscale Compatible)");
     println!("Press Ctrl+Q or Ctrl+C to exit");
+    println!("Special Features: Tailscale Mesh Broadcasting Enabled");
 
     // Create graphics engine
     let graphics_engine = GraphicsEngine::new(64);

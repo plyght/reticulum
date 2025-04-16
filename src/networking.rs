@@ -70,12 +70,24 @@ impl Broadcaster {
             "{}{}{}{}None",
             MSG_TYPE_DISCOVERY, FIELD_SPLITTER, username, FIELD_SPLITTER
         );
+        
+        // Broadcast to local subnet
         let broadcast_addr =
             SocketAddr::new(BROADCAST_ADDR.parse::<IpAddr>().unwrap(), DISCOVERY_PORT);
-
-        discovery_socket
+        
+        // Send to local broadcast
+        let _ = discovery_socket
             .send_to(discovery_msg.as_bytes(), broadcast_addr)
-            .await?;
+            .await;
+            
+        // Also try Tailscale subnet broadcast (100.100.100.100)
+        // This is a special Tailscale address that may help with discovery
+        if let Ok(tailscale_addr) = "100.100.100.100".parse::<IpAddr>() {
+            let tailscale_broadcast = SocketAddr::new(tailscale_addr, DISCOVERY_PORT);
+            let _ = discovery_socket
+                .send_to(discovery_msg.as_bytes(), tailscale_broadcast)
+                .await;
+        }
 
         Ok(())
     }
@@ -115,16 +127,10 @@ impl Broadcaster {
 
         let peers = self.peers.lock().unwrap().clone();
 
-        if peers.is_empty() {
-            // If no peers known, send to local broadcast as fallback
-            let broadcast_addr =
-                SocketAddr::new(BROADCAST_ADDR.parse::<IpAddr>().unwrap(), self.chat_port);
-            udp_socket
-                .send_to(encoded_message.as_bytes(), broadcast_addr)
-                .await?;
-        } else {
+        // Always send to known peers if we have any
+        if !peers.is_empty() {
             // Send to each known peer
-            for peer_addr in peers {
+            for peer_addr in &peers {
                 let target_addr = SocketAddr::new(peer_addr.ip(), self.chat_port);
 
                 match udp_socket
@@ -137,6 +143,21 @@ impl Broadcaster {
                     }
                 }
             }
+        }
+        
+        // Always try local broadcast (will work on local networks)
+        let broadcast_addr =
+            SocketAddr::new(BROADCAST_ADDR.parse::<IpAddr>().unwrap(), self.chat_port);
+        let _ = udp_socket
+            .send_to(encoded_message.as_bytes(), broadcast_addr)
+            .await;
+            
+        // Also try Tailscale subnet broadcast (100.100.100.100)
+        if let Ok(tailscale_addr) = "100.100.100.100".parse::<IpAddr>() {
+            let tailscale_broadcast = SocketAddr::new(tailscale_addr, self.chat_port);
+            let _ = udp_socket
+                .send_to(encoded_message.as_bytes(), tailscale_broadcast)
+                .await;
         }
 
         Ok(())
