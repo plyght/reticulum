@@ -1,0 +1,1 @@
+/Users/nicojaffer/reticulum/target/debug/subnet_vox: /Users/nicojaffer/reticulum/src/console_graphics.rs /Users/nicojaffer/reticulum/src/constants.rs /Users/nicojaffer/reticulum/src/main.rs /Users/nicojaffer/reticulum/src/message.rs /Users/nicojaffer/reticulum/src/networking.rs /Users/nicojaffer/reticulum/src/user_interface.rs
