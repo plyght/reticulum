@@ -16,9 +16,13 @@ pub const OUTBOUND_MESSAGE_REPORTED_IP: &str = "000.000.000.000";
 pub const USER_INPUT_PROMPT: &str = "BROADCAST >>> ";
 pub const USER_INPUT_PROMPT_LENGTH: usize = 14;
 pub const START_MESSAGE_LINE: usize = 2;
+pub const STATUS_BAR_LINE: usize = 1;
 
 pub const LOGO_ASCII_ART: &str = " _______ _     _ ______  __   _ _______ _______       _    _  _____  _     _\n |______ |     | |_____] | \\  | |______    |           \\  /  |     |  \\___/ \n ______| |_____| |_____] |  \\_| |______    |    _____   \\/   |_____| _/   \\_";
 
 pub const ONLINE_ASCII_ART: &str = "  _____  __   _        _____ __   _ _______\n |     | | \\  | |        |   | \\  | |______\n |_____| |  \\_| |_____ __|__ |  \\_| |______";
 
 pub const DO_BULLSHIT_INTRO: bool = true;
+
+// Common chat commands for tab completion
+pub const COMMON_COMMANDS: [&str; 5] = ["/help", "/quit", "/clear", "/users", "/ping"];

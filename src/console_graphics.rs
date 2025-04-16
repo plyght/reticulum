@@ -1,11 +1,14 @@
 use crate::constants::{
-    LOGO_ASCII_ART, START_MESSAGE_LINE, USER_INPUT_PROMPT, USER_INPUT_PROMPT_LENGTH,
+    COMMON_COMMANDS, LOGO_ASCII_ART, START_MESSAGE_LINE, STATUS_BAR_LINE, USER_INPUT_PROMPT,
+    USER_INPUT_PROMPT_LENGTH,
 };
 use crate::message::Message;
+use chrono::Local;
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent},
-    execute, queue, style,
+    execute, queue,
+    style::{self, Color, SetBackgroundColor, SetForegroundColor},
     terminal::{self, ClearType},
 };
 use std::io::{stdout, Write};
@@ -19,6 +22,9 @@ pub struct GraphicsEngine {
     previous_width: usize,
     max_message_lines: usize,
     message_lines: Vec<String>,
+    input_history: Vec<String>,
+    history_position: usize,
+    current_input: String,
 }
 
 impl Clone for GraphicsEngine {
@@ -30,6 +36,9 @@ impl Clone for GraphicsEngine {
             previous_width: self.previous_width,
             max_message_lines: self.max_message_lines,
             message_lines: self.message_lines.clone(),
+            input_history: self.input_history.clone(),
+            history_position: self.history_position,
+            current_input: self.current_input.clone(),
         }
     }
 }
@@ -45,6 +54,9 @@ impl GraphicsEngine {
             previous_width: width as usize,
             max_message_lines,
             message_lines: Vec::new(),
+            input_history: Vec::with_capacity(50),
+            history_position: 0,
+            current_input: String::new(),
         }
     }
 
@@ -101,10 +113,18 @@ impl GraphicsEngine {
     pub fn add_message(&mut self, message: &Message) {
         // Format sender info differently for local messages
         let message_text = if message.sender_ip() == "local" {
-            format!("YOU >>> {}: {}", message.sender_name(), message.content())
-        } else {
+            let timestamp = chrono::Local::now().format("%H:%M:%S");
             format!(
-                "{} >>> {}: {}",
+                "[{}] YOU >>> {}: {}",
+                timestamp,
+                message.sender_name(),
+                message.content()
+            )
+        } else {
+            let timestamp = chrono::Local::now().format("%H:%M:%S");
+            format!(
+                "[{}] {} >>> {}: {}",
+                timestamp,
                 message.sender_ip(),
                 message.sender_name(),
                 message.content()
@@ -173,11 +193,65 @@ impl GraphicsEngine {
             if should_print {
                 let mut engine = graphics_engine.lock().unwrap();
                 let _ = engine.print_all_messages(true);
+                let _ = engine.print_status_bar();
                 let _ = engine.print_input_prompt();
             }
 
+            // Update status bar every second
+            let mut engine = graphics_engine.lock().unwrap();
+            let _ = engine.print_status_bar();
+            drop(engine);
+
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+
+    pub fn print_status_bar(&mut self) -> std::io::Result<()> {
+        self.update_resolution();
+
+        // Get current time
+        let now = Local::now();
+        let time_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+
+        // Create status line with time and terminal size
+        let status = format!(
+            "Time: {} | Terminal: {}x{} | Press Ctrl+L to clear screen | Use ↑↓ arrows for history",
+            time_str, self.width, self.height
+        );
+
+        // Truncate if needed
+        let status_display = if status.len() > self.width {
+            status[..self.width].to_string()
+        } else {
+            status
+        };
+
+        let mut stdout = stdout();
+
+        // Save cursor position
+        queue!(stdout, cursor::SavePosition)?;
+
+        // Move to status bar line
+        queue!(
+            stdout,
+            cursor::MoveTo(0, (self.height - STATUS_BAR_LINE - 1) as u16)
+        )?;
+
+        // Set colors and print status
+        queue!(
+            stdout,
+            SetBackgroundColor(Color::Blue),
+            SetForegroundColor(Color::White),
+            terminal::Clear(ClearType::CurrentLine),
+            style::Print(status_display),
+            SetBackgroundColor(Color::Reset),
+            SetForegroundColor(Color::Reset)
+        )?;
+
+        // Restore cursor position
+        queue!(stdout, cursor::RestorePosition)?;
+
+        stdout.flush()
     }
 
     pub fn print_input_prompt(&mut self) -> std::io::Result<()> {
@@ -201,28 +275,61 @@ impl GraphicsEngine {
     }
 
     // This method will be called when properly handling program exit
-    #[allow(dead_code)]
     pub fn restore_terminal() -> std::io::Result<()> {
+        // First clear the terminal to remove any leftover UI elements
+        let _ = Self::clear_console();
+
+        // Disable raw mode and leave alternate screen
         terminal::disable_raw_mode()?;
         execute!(stdout(), terminal::LeaveAlternateScreen)?;
+
+        // Flush stdout to ensure all terminal commands are processed
+        stdout().flush()?;
+
         Ok(())
     }
 
-    pub fn read_input(input: &mut String) -> std::io::Result<(bool, bool)> {
+    pub fn read_input(&mut self, input: &mut String) -> std::io::Result<(bool, bool)> {
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(KeyEvent {
                 code, modifiers, ..
             }) = event::read()?
             {
                 match code {
-                    KeyCode::Enter => return Ok((true, false)),
+                    KeyCode::Enter => {
+                        if !input.is_empty()
+                            && (self.input_history.is_empty()
+                                || self.input_history.last().unwrap() != input)
+                        {
+                            self.input_history.push(input.clone());
+                            if self.input_history.len() > 50 {
+                                self.input_history.remove(0);
+                            }
+                        }
+                        self.history_position = self.input_history.len();
+                        self.current_input.clear();
+                        return Ok((true, false));
+                    }
                     KeyCode::Char('q') if modifiers == event::KeyModifiers::CONTROL => {
-                        // Ctrl+Q exits the application
+                        // Ctrl+Q exits the application immediately
+                        println!("\nExiting application via Ctrl+Q...");
+                        stdout().flush()?;
                         return Ok((false, true));
                     }
                     KeyCode::Char('c') if modifiers == event::KeyModifiers::CONTROL => {
-                        // Ctrl+C also exits the application
+                        // Ctrl+C also exits the application immediately
+                        println!("\nExiting application via Ctrl+C...");
+                        stdout().flush()?;
                         return Ok((false, true));
+                    }
+                    KeyCode::Char('l') if modifiers == event::KeyModifiers::CONTROL => {
+                        // Ctrl+L clears the screen
+                        let _ = Self::clear_console();
+                        let _ = self.print_all_messages(true);
+                        let _ = self.print_status_bar();
+                        let _ = self.print_input_prompt();
+                        print!("{}", input);
+                        stdout().flush()?;
                     }
                     KeyCode::Char(c) => {
                         input.push(c);
@@ -239,11 +346,166 @@ impl GraphicsEngine {
                             )?;
                         }
                     }
-                    KeyCode::Esc => return Ok((false, true)),
+                    KeyCode::Tab => {
+                        // Tab completion for commands
+                        if input.starts_with('/') {
+                            let matching_commands: Vec<&str> = COMMON_COMMANDS
+                                .iter()
+                                .filter(|&cmd| cmd.starts_with(input.as_str()))
+                                .cloned()
+                                .collect();
+
+                            match matching_commands.len() {
+                                1 => {
+                                    // Exact match, complete the command
+                                    input.clear();
+                                    input.push_str(matching_commands[0]);
+
+                                    // Clear line and print the completed command
+                                    execute!(
+                                        stdout(),
+                                        cursor::MoveTo(
+                                            USER_INPUT_PROMPT_LENGTH as u16,
+                                            (self.height - 1) as u16
+                                        ),
+                                        terminal::Clear(ClearType::UntilNewLine),
+                                        style::Print(input)
+                                    )?;
+                                }
+                                n if n > 1 => {
+                                    // Multiple matches - show options above the input line
+                                    let mut stdout = stdout();
+
+                                    // Save cursor position
+                                    queue!(stdout, cursor::SavePosition)?;
+
+                                    // Move to the line above input
+                                    queue!(stdout, cursor::MoveTo(0, (self.height - 2) as u16))?;
+
+                                    // Print matches
+                                    let matches_str = matching_commands.join("  ");
+                                    queue!(
+                                        stdout,
+                                        terminal::Clear(ClearType::CurrentLine),
+                                        SetForegroundColor(Color::Yellow),
+                                        style::Print(matches_str),
+                                        SetForegroundColor(Color::Reset)
+                                    )?;
+
+                                    // Restore cursor position
+                                    queue!(stdout, cursor::RestorePosition)?;
+                                    stdout.flush()?;
+
+                                    // Find common prefix if any
+                                    if let Some(common_prefix) =
+                                        Self::find_common_prefix(&matching_commands)
+                                    {
+                                        if common_prefix.len() > input.len() {
+                                            input.clear();
+                                            input.push_str(&common_prefix);
+
+                                            // Update the input line
+                                            execute!(
+                                                stdout,
+                                                cursor::MoveTo(
+                                                    USER_INPUT_PROMPT_LENGTH as u16,
+                                                    (self.height - 1) as u16
+                                                ),
+                                                terminal::Clear(ClearType::UntilNewLine),
+                                                style::Print(input)
+                                            )?;
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    KeyCode::Up => {
+                        if !self.input_history.is_empty() {
+                            if self.history_position == self.input_history.len() {
+                                self.current_input = input.clone();
+                            }
+
+                            if self.history_position > 0 {
+                                self.history_position -= 1;
+                                input.clear();
+                                input.push_str(&self.input_history[self.history_position]);
+
+                                // Clear current line and print new input
+                                execute!(
+                                    stdout(),
+                                    cursor::MoveTo(
+                                        USER_INPUT_PROMPT_LENGTH as u16,
+                                        (self.height - 1) as u16
+                                    ),
+                                    terminal::Clear(ClearType::UntilNewLine),
+                                    style::Print(input)
+                                )?;
+                            }
+                        }
+                    }
+                    KeyCode::Down => {
+                        if self.history_position < self.input_history.len() {
+                            self.history_position += 1;
+                            input.clear();
+
+                            if self.history_position == self.input_history.len() {
+                                input.push_str(&self.current_input);
+                            } else {
+                                input.push_str(&self.input_history[self.history_position]);
+                            }
+
+                            // Clear current line and print new input
+                            execute!(
+                                stdout(),
+                                cursor::MoveTo(
+                                    USER_INPUT_PROMPT_LENGTH as u16,
+                                    (self.height - 1) as u16
+                                ),
+                                terminal::Clear(ClearType::UntilNewLine),
+                                style::Print(input)
+                            )?;
+                        }
+                    }
+                    KeyCode::Esc => {
+                        // Escape key exits the application
+                        println!("\nExiting application via Escape key...");
+                        stdout().flush()?;
+                        return Ok((false, true));
+                    }
                     _ => {}
                 }
             }
         }
         Ok((false, false))
+    }
+
+    // Helper function to find the common prefix among strings
+    fn find_common_prefix(strings: &[&str]) -> Option<String> {
+        if strings.is_empty() {
+            return None;
+        }
+
+        if strings.len() == 1 {
+            return Some(strings[0].to_string());
+        }
+
+        let first = strings[0];
+        let mut common_prefix = String::new();
+
+        for (i, c) in first.chars().enumerate() {
+            if strings.iter().all(|s| s.chars().nth(i) == Some(c)) {
+                common_prefix.push(c);
+            } else {
+                break;
+            }
+        }
+
+        if common_prefix.is_empty() {
+            None
+        } else {
+            Some(common_prefix)
+        }
     }
 }

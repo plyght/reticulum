@@ -41,6 +41,7 @@ impl Broadcaster {
         }
     }
 
+    #[allow(dead_code)]
     pub fn update_username(&self, new_username: String) {
         let mut username = self.username.lock().unwrap();
         *username = new_username;
@@ -151,7 +152,7 @@ pub struct Receiver {
 }
 
 impl Receiver {
-    pub fn new(chat_port: u16, username: String) -> Self {
+    pub fn new(_chat_port: u16, username: String) -> Self {
         let message_queue = Arc::new(Mutex::new(VecDeque::new()));
         let (tx, rx) = mpsc::channel(100);
 
@@ -168,6 +169,7 @@ impl Receiver {
         self.peers.clone()
     }
 
+    #[allow(dead_code)]
     pub fn update_username(&self, new_username: String) {
         let mut username = self.username.lock().unwrap();
         *username = new_username;

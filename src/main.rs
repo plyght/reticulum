@@ -50,6 +50,15 @@ async fn main() -> std::io::Result<()> {
     // Load cyberpunk intro
     show_intro(CHAT_PORT, DISCOVERY_PORT).await;
 
+    // Set up terminal UI
+    GraphicsEngine::setup_terminal()?;
+    {
+        let mut engine = user_interface.graphics_engine.lock().unwrap();
+        let _ = engine.print_all_messages(true);
+        let _ = engine.print_status_bar();
+        let _ = engine.print_input_prompt();
+    }
+
     // Start the format keeper thread for terminal
     let graphics_engine_clone = user_interface.graphics_engine.clone();
     task::spawn_blocking(move || {
@@ -96,14 +105,14 @@ async fn main() -> std::io::Result<()> {
 
             // Merge the peer lists
             let receiver_peers_clone = receiver_peers.lock().unwrap().clone();
-            
+
             {
                 let mut broadcaster_peers_lock = broadcaster_peers.lock().unwrap();
                 for peer in receiver_peers_clone {
                     broadcaster_peers_lock.insert(peer);
                 }
             } // Release lock before await
-            
+
             time::sleep(sync_interval).await;
         }
     });
@@ -139,11 +148,22 @@ async fn main() -> std::io::Result<()> {
         }
         _ = shutdown.notified() => {
             println!("\nShutting down gracefully...");
-            // Give time for terminal to restore properly
+            // Restore terminal properly
+            let _ = GraphicsEngine::restore_terminal();
+            // Force exit with a small delay to allow terminal to reset
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            std::process::exit(0);
         }
     }
 
+    // Make sure the terminal is properly restored
+    let _ = GraphicsEngine::restore_terminal();
+
+    // Force the process to exit completely
+    std::process::exit(0);
+
+    // This is unreachable, but needed for type correctness
+    #[allow(unreachable_code)]
     Ok(())
 }
 
@@ -189,10 +209,16 @@ async fn continuous_broadcast_task(ui: &UserInterface) -> std::io::Result<()> {
 
         // Get input character by character
         loop {
-            let (input_complete, should_exit) = GraphicsEngine::read_input(&mut input)?;
+            let (input_complete, should_exit) = {
+                let mut engine = engine.lock().unwrap();
+                engine.read_input(&mut input)?
+            };
             if should_exit {
                 // User pressed Ctrl+Q or Ctrl+C or Esc
-                return Ok(());
+                // Restore terminal properly
+                GraphicsEngine::restore_terminal()?;
+                // Force exit the process to ensure all threads are terminated
+                std::process::exit(0);
             }
             if input_complete {
                 break;

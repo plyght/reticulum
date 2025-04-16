@@ -1,0 +1,1 @@
+{"rustc":2639730858202328753,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[5157631553186200874,"build_script_build",false,14718023375822893705]],"local":[{"RerunIfChanged":{"output":"debug/build/num-traits-f85d4c0ee5372996/output","paths":["build.rs"]}}],"rustflags":["--cfg","tokio_allow_from_blocking_fd"],"config":0,"compile_kind":0}

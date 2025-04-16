@@ -1,5 +1,5 @@
 [package]
-name = "subnet_vox"
+name = "reticulum"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,3 +11,4 @@ socket2 = "0.5.5"
 lazy_static = "1.4.0"
 tokio-stream = "0.1.14"
 tokio-util = { version = "0.7.10", features = ["net"] }
+chrono = "0.4"

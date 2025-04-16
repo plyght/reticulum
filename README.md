@@ -1,8 +1,8 @@
-# Subnet Vox
+# Reticulum
 
-A simple UDP-based multicast chat application written in Rust. This allows multiple users on the same subnet to communicate through a terminal-based interface.
+A simple UDP-based mesh networking library and chat application written in Rust. This allows multiple users on the same subnet to communicate through a terminal-based interface.
 
-This project was originally written in C++ and has been converted to Rust for improved safety, concurrency, and maintainability.
+This project enables peer-to-peer communication without relying on central servers.
 
 ## Features
 
@@ -37,7 +37,7 @@ cargo build --release
 After building, run the application:
 
 ```
-./target/release/subnet_vox
+./target/release/reticulum
 ```
 
 ## Usage
