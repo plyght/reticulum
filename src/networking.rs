@@ -1,6 +1,6 @@
 use crate::constants::{
     BROADCAST_ADDR, DISCOVERY_PORT, FIELD_SPLITTER, MSG_TYPE_CHAT, MSG_TYPE_DISCOVERY,
-    MSG_TYPE_DISCOVERY_RESPONSE, RECV_BUFFER_SIZE,
+    MSG_TYPE_DISCOVERY_RESPONSE, RECV_BUFFER_SIZE, TAILSCALE_MULTICAST,
 };
 use crate::message::Message;
 use socket2::{Domain, Protocol, Socket, Type};
@@ -70,19 +70,18 @@ impl Broadcaster {
             "{}{}{}{}None",
             MSG_TYPE_DISCOVERY, FIELD_SPLITTER, username, FIELD_SPLITTER
         );
-        
+
         // Broadcast to local subnet
         let broadcast_addr =
             SocketAddr::new(BROADCAST_ADDR.parse::<IpAddr>().unwrap(), DISCOVERY_PORT);
-        
+
         // Send to local broadcast
         let _ = discovery_socket
             .send_to(discovery_msg.as_bytes(), broadcast_addr)
             .await;
-            
-        // Also try Tailscale subnet broadcast (100.100.100.100)
-        // This is a special Tailscale address that may help with discovery
-        if let Ok(tailscale_addr) = "100.100.100.100".parse::<IpAddr>() {
+
+        // Also try Tailscale subnet broadcast address
+        if let Ok(tailscale_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
             let tailscale_broadcast = SocketAddr::new(tailscale_addr, DISCOVERY_PORT);
             let _ = discovery_socket
                 .send_to(discovery_msg.as_bytes(), tailscale_broadcast)
@@ -144,16 +143,16 @@ impl Broadcaster {
                 }
             }
         }
-        
+
         // Always try local broadcast (will work on local networks)
         let broadcast_addr =
             SocketAddr::new(BROADCAST_ADDR.parse::<IpAddr>().unwrap(), self.chat_port);
         let _ = udp_socket
             .send_to(encoded_message.as_bytes(), broadcast_addr)
             .await;
-            
-        // Also try Tailscale subnet broadcast (100.100.100.100)
-        if let Ok(tailscale_addr) = "100.100.100.100".parse::<IpAddr>() {
+
+        // Also try Tailscale subnet broadcast address
+        if let Ok(tailscale_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
             let tailscale_broadcast = SocketAddr::new(tailscale_addr, self.chat_port);
             let _ = udp_socket
                 .send_to(encoded_message.as_bytes(), tailscale_broadcast)
@@ -276,6 +275,10 @@ impl Receiver {
         socket.set_reuse_address(true)?;
         socket.set_broadcast(true)?;
 
+        // Enabling re-use port for better results across platforms
+        #[cfg(not(windows))]
+        socket.set_reuse_port(true)?;
+
         // Bind to the discovery port
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), discovery_port);
         socket.bind(&addr.into())?;
@@ -285,6 +288,14 @@ impl Receiver {
 
         // Convert to tokio UDP socket
         let udp_socket = UdpSocket::from_std(std_socket)?;
+
+        // Join multicast group if possible (for Tailscale compatibility)
+        if let Ok(multicast_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
+            if let IpAddr::V4(multicast_v4) = multicast_addr {
+                // Try to join multicast group, ignore errors since this is just for better discovery
+                let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
+            }
+        }
 
         let mut buf = vec![0u8; RECV_BUFFER_SIZE];
 
@@ -305,6 +316,10 @@ impl Receiver {
         socket.set_reuse_address(true)?;
         socket.set_broadcast(true)?;
 
+        // Enabling re-use port for better results across platforms
+        #[cfg(not(windows))]
+        socket.set_reuse_port(true)?;
+
         // Bind to the chat port
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), chat_port);
         socket.bind(&addr.into())?;
@@ -314,6 +329,14 @@ impl Receiver {
 
         // Convert to tokio UDP socket
         let udp_socket = UdpSocket::from_std(std_socket)?;
+
+        // Join multicast group if possible (for Tailscale compatibility)
+        if let Ok(multicast_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
+            if let IpAddr::V4(multicast_v4) = multicast_addr {
+                // Try to join multicast group, ignore errors since this is just for better discovery
+                let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
+            }
+        }
 
         let mut buf = vec![0u8; RECV_BUFFER_SIZE];
         let mut rx = self.message_receiver.take().unwrap();

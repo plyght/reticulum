@@ -4,6 +4,8 @@ pub const RECV_BUFFER_SIZE: usize = 8192;
 
 // Used for local network discovery via broadcast
 pub const BROADCAST_ADDR: &str = "255.255.255.255";
+// Multicast address for Tailscale discovery
+pub const TAILSCALE_MULTICAST: &str = "100.100.100.100";
 
 // Special message types for discovery
 pub const MSG_TYPE_DISCOVERY: &str = "DISCOVER";

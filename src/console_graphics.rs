@@ -217,7 +217,7 @@ impl GraphicsEngine {
         // Calculate spaces for centering and padding
         let terminal_info = format!("{}x{}", self.width, self.height);
         let help_text = "Ctrl+L: Clear | ↑↓: History";
-        
+
         // Create a more readable status line with distinct sections
         let status = format!(
             " 🕒 {} | 📅 {} | 📺 {} | ⌨️  {} ",

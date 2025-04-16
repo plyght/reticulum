@@ -19,9 +19,9 @@ use user_interface::UserInterface;
 async fn main() -> std::io::Result<()> {
     // Setup terminal cleanup on exit
     let _cleanup_guard = CleanupGuard {};
-    println!("Subnet Vox - P2P Chat (Tailscale Compatible)");
+    println!("Subnet Vox - P2P Chat (Tailscale Enhanced)");
     println!("Press Ctrl+Q or Ctrl+C to exit");
-    println!("Special Features: Tailscale Mesh Broadcasting Enabled");
+    println!("Special Features: Tailscale Multicast & Direct Communication");
 
     // Create graphics engine
     let graphics_engine = GraphicsEngine::new(64);
