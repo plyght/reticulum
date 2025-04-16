@@ -98,8 +98,9 @@ impl Broadcaster {
                 eprintln!("Peer discovery error: {}", e);
             }
 
-            // Run discovery every 30 seconds
-            sleep(Duration::from_secs(30)).await;
+            // Run discovery more frequently (every 15 seconds)
+            // This helps with more reliable peer discovery
+            sleep(Duration::from_secs(15)).await;
         }
     }
 
@@ -151,13 +152,28 @@ impl Broadcaster {
             .send_to(encoded_message.as_bytes(), broadcast_addr)
             .await;
 
-        // Also try Tailscale subnet broadcast address
-        if let Ok(tailscale_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
-            let tailscale_broadcast = SocketAddr::new(tailscale_addr, self.chat_port);
-            let _ = udp_socket
-                .send_to(encoded_message.as_bytes(), tailscale_broadcast)
-                .await;
+        // Try to send to all Tailscale IPs in the 100.x.y.z range
+        // This is a brute force approach but will work for small networks
+        println!("[DEBUG] Broadcasting to Tailscale network...");
+        let mut tailscale_sent = 0;
+        let mut tailscale_errors = 0;
+        for a in 64..128 {
+            // Typical Tailscale range
+            for b in 0..255 {
+                let tailscale_ip = format!("100.{}.{}.2", a, b);
+                if let Ok(ts_addr) = tailscale_ip.parse::<IpAddr>() {
+                    let target = SocketAddr::new(ts_addr, self.chat_port);
+                    match udp_socket.send_to(encoded_message.as_bytes(), target).await {
+                        Ok(_) => tailscale_sent += 1,
+                        Err(_) => tailscale_errors += 1,
+                    }
+                }
+            }
         }
+        println!(
+            "[DEBUG] Tailscale broadcast complete: sent to {} addresses, {} errors",
+            tailscale_sent, tailscale_errors
+        );
 
         Ok(())
     }
@@ -248,22 +264,48 @@ impl Receiver {
         match msg_type.as_str() {
             MSG_TYPE_DISCOVERY => {
                 // Someone is looking for peers, respond with our presence
+                println!(
+                    "[DEBUG] Received discovery request from {} ({})",
+                    sender_name,
+                    src.ip()
+                );
                 let username = self.username.lock().unwrap().clone();
                 let response = format!(
                     "{}{}{}{}None",
                     MSG_TYPE_DISCOVERY_RESPONSE, FIELD_SPLITTER, username, FIELD_SPLITTER
                 );
+                println!("[DEBUG] Sending discovery response to {}", src);
                 socket.send_to(response.as_bytes(), src).await?;
 
                 // Add this peer to our list
-                self.peers.lock().unwrap().insert(src);
+                let mut peers = self.peers.lock().unwrap();
+                let is_new = peers.insert(src);
+                let peer_count = peers.len();
+                if is_new {
+                    println!(
+                        "[DEBUG] Added new peer: {} ({}). Total peers: {}",
+                        sender_name,
+                        src.ip(),
+                        peer_count
+                    );
+                }
             }
             MSG_TYPE_DISCOVERY_RESPONSE => {
                 // Someone responded to our discovery request, add them to peers
-                self.peers.lock().unwrap().insert(src);
-                println!("Discovered peer: {} ({})", sender_name, src.ip());
+                let mut peers = self.peers.lock().unwrap();
+                let is_new = peers.insert(src);
+                let peer_count = peers.len();
+                println!(
+                    "[DEBUG] Discovered peer: {} ({}). New: {}. Total peers: {}",
+                    sender_name,
+                    src.ip(),
+                    is_new,
+                    peer_count
+                );
             }
-            _ => {} // Ignore other message types
+            _ => {
+                println!("[DEBUG] Received unknown message type: {}", msg_type);
+            } // Log unknown message types
         }
 
         Ok(())
@@ -290,11 +332,9 @@ impl Receiver {
         let udp_socket = UdpSocket::from_std(std_socket)?;
 
         // Join multicast group if possible (for Tailscale compatibility)
-        if let Ok(multicast_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
-            if let IpAddr::V4(multicast_v4) = multicast_addr {
-                // Try to join multicast group, ignore errors since this is just for better discovery
-                let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
-            }
+        if let Ok(IpAddr::V4(multicast_v4)) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
+            // Try to join multicast group, ignore errors since this is just for better discovery
+            let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
         }
 
         let mut buf = vec![0u8; RECV_BUFFER_SIZE];
@@ -331,11 +371,9 @@ impl Receiver {
         let udp_socket = UdpSocket::from_std(std_socket)?;
 
         // Join multicast group if possible (for Tailscale compatibility)
-        if let Ok(multicast_addr) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
-            if let IpAddr::V4(multicast_v4) = multicast_addr {
-                // Try to join multicast group, ignore errors since this is just for better discovery
-                let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
-            }
+        if let Ok(IpAddr::V4(multicast_v4)) = TAILSCALE_MULTICAST.parse::<IpAddr>() {
+            // Try to join multicast group, ignore errors since this is just for better discovery
+            let _ = udp_socket.join_multicast_v4(multicast_v4, Ipv4Addr::UNSPECIFIED);
         }
 
         let mut buf = vec![0u8; RECV_BUFFER_SIZE];

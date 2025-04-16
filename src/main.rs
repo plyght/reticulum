@@ -1,11 +1,13 @@
 mod console_graphics;
 mod constants;
+mod debug_logger;
 mod message;
 mod networking;
 mod user_interface;
 
 use console_graphics::GraphicsEngine;
 use constants::{CHAT_PORT, DISCOVERY_PORT};
+use debug_logger::enable_debug;
 use message::Message;
 use networking::{Broadcaster, Receiver};
 use std::io::Write;
@@ -22,6 +24,9 @@ async fn main() -> std::io::Result<()> {
     println!("Subnet Vox - P2P Chat (Tailscale Enhanced)");
     println!("Press Ctrl+Q or Ctrl+C to exit");
     println!("Special Features: Tailscale Multicast & Direct Communication");
+
+    // Enable debug logging
+    enable_debug();
 
     // Create graphics engine
     let graphics_engine = GraphicsEngine::new(64);
